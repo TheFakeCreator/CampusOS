@@ -1,3 +1,6 @@
+> [!WARNING]
+> Humanet is under development and may break.
+
 # campus-os
 
 > A modular, multi-tenant Campus Operating System for managing the complete lifecycle of campus activities
