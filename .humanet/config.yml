@@ -54,7 +54,7 @@ humanet:
   
   # Links
   platform_url: null
-  repository_url: null
+  repository_url: "https://github.com/NITRR-Official/CampusOS"
   links:
     website: ""
     documentation: ""
