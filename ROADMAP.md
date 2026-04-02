@@ -60,9 +60,9 @@ Set up development environment, architecture, and documentation.
 
 ### Backend Core
 
-* [ ] Setup Express server
-* [ ] Setup middleware structure
-* [ ] Implement plugin loader system
+* [x] Setup Express server (`/backend/src/index.js`)
+* [x] Setup middleware structure (auth, logging, error handling)
+* [x] Implement plugin loader system (`plugin-loader.js`)
 
 ---
 
