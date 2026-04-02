@@ -76,7 +76,7 @@ Set up development environment, architecture, and documentation.
 
 ### Copilot Setup
 
-* [x] Create `.humanet/COPILOT.md`
+* [x] Create `COPILOT.md`
 * [x] Add project architecture rules
 * [x] Setup 20 development skills
 * [x] Setup 15 AI agent personas

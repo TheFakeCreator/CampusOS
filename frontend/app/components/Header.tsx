@@ -58,7 +58,7 @@ export default function Header() {
         {/* User Menu */}
         <div className="flex items-center">
           <button className="flex items-center gap-3 bg-none border border-gray-300 rounded p-2 cursor-pointer transition-all duration-200 text-gray-900 hover:bg-gray-50 hover:border-blue-500" aria-label="User menu">
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-xl flex-shrink-0">👤</div>
+            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-xl shrink-0">👤</div>
             <span className="text-sm font-medium hidden lg:inline">Admin User</span>
             <span className="text-xs text-gray-400">▼</span>
           </button>
