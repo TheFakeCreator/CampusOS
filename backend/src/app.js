@@ -52,7 +52,7 @@ export async function createApp(registry) {
     if (!isDev) throw error; // Fail hard in production
   }
 
-  // ============== ERROR HANDLING (Must be last!) ==============
+  // ============== ERROR HANDLING ==============
   // 404 handler - for routes that don't exist
   app.use(notFoundMiddleware);
 

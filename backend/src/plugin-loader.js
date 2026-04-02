@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function loadPlugins(app, registry) {
-  const appsDir = path.join(__dirname, '../../..', 'apps');
+  const appsDir = path.join(__dirname, '../..', 'apps');
 
   if (!fs.existsSync(appsDir)) {
     console.warn('⚠️  /apps directory not found. No plugins loaded.');
