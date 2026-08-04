@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 const taskSchema = new mongoose.Schema(
   {
     clubId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Club',
+      type: String,
       required: true
     },
     title: {
