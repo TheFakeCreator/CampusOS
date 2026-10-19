@@ -1,6 +1,5 @@
 import { createTaskController } from './controller/task.controller.js';
 import { registerTaskRoutes } from './routes/task.routes.js';
-import { Task } from './schema/task.model.js';
 import { registerTaskHandlers } from './listeners/index.js';
 
 export async function init(app, registry, eventBus) {
@@ -47,10 +46,11 @@ export async function init(app, registry, eventBus) {
     });
 
     registry.registerContextResolver('/api/v1/tasks', async (req) => {
-      const taskId = req.params?.taskId || req.url.split('/')[4];
+      const taskId =
+        req.params?.taskId || req.path.split('/')[4]?.split('?')[0];
       if (!taskId) return null;
       try {
-        const taskDoc = await Task.findById(taskId).select('clubId').lean();
+        const taskDoc = await taskRepository.findById(taskId);
         return taskDoc?.clubId
           ? { type: 'club:member_service', id: taskDoc.clubId.toString() }
           : null;

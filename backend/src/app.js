@@ -6,7 +6,6 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import mongoose from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import { loggerMiddleware } from './middleware/logger.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -18,13 +17,15 @@ import { errorMiddleware, notFoundMiddleware } from './middleware/error.js';
 import { registerJwtAuthenticator } from './auth/jwt-authenticator.js';
 import { loadPlugins } from './plugin-loader.js';
 import { User, Plugin } from './database/schemas/index.js';
+import { databaseManager, healthCheck } from './database/connection.js';
 
 export async function createApp(registry) {
   const app = express();
   app.disable('x-powered-by');
   app.locals.registry = registry;
 
-  // Register Core Models so plugins can use them
+  // Register Core Database Services & Models
+  databaseManager.registerServices(registry);
   registry.registerService('core:models', { User, Plugin });
 
   // Environment config
@@ -95,14 +96,15 @@ export async function createApp(registry) {
   app.use(loggerMiddleware);
 
   // 5. Health check endpoint (no auth required)
-  app.get('/health', (req, res) => {
-    const dbState = mongoose.connection.readyState;
-    const isHealthy = dbState === 1;
+  app.get('/health', async (req, res) => {
+    const health = await healthCheck();
+    const isHealthy = health?.healthy === true;
 
     res.status(isHealthy ? 200 : 503).json({
       success: isHealthy,
       status: isHealthy ? 'healthy' : 'unhealthy',
       database: isHealthy ? 'connected' : 'disconnected',
+      databases: health?.databases,
       timestamp: new Date().toISOString()
     });
   });
