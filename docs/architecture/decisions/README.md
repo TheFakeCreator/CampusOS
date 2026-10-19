@@ -23,6 +23,7 @@ This directory contains the key architectural decisions made for CampusOS. Each 
 | [ADR-014](./ADR-014-RUNTIME_ESM_FRONTEND_PLUGINS.md)                  | Runtime ESM Frontend Plugins                    | 💡 Proposed   | 2026-10-20 |
 | [ADR-015](./ADR-015-CENTRAL_SCOPED_LOGGER.md)                         | Central Scoped Logger & Structured Logging      | 💡 Proposed   | 2026-10-20 |
 | [ADR-016](./ADR-016-POLYGLOT_DATABASE_ADAPTER.md)                     | Polyglot Database Architecture & Adapters       | ✅ Accepted   | 2026-10-20 |
+| [ADR-017](./ADR-017-TWO_TIER_PLUGIN_SANDBOXING.md)                    | Two-Tier Plugin Architecture & Sandboxing       | 💡 Proposed   | 2026-10-20 |
 
 ## What is an ADR?
 
