@@ -1,4 +1,4 @@
-# ADR-017: Two-Tier Plugin Architecture and Sandboxed Capability Isolation
+# ADR-017: Two-Tier Plugin Architecture and Capability-Based Sandboxing
 
 ## Status
 
@@ -6,76 +6,108 @@ Proposed (Accepted for Implementation)
 
 ## Context
 
-CampusOS was architected to be extensible through community plugins. However, the current bootloader implementation (`backend/src/plugin-loader.js`) operates on an implicit "flat-trust" model:
+CampusOS was architected to be extensible through community and third-party plugins. However, the initial bootloader implementation (`backend/src/plugin-loader.js`) operated on an implicit "flat-trust" model:
 
-- The unrestricted global `registry`, Express `app`, and `eventBus` singletons are passed directly to every plugin's `init()` function.
+- The unrestricted global `registry`, Express `app`, and `eventBus` singletons were passed directly to every plugin's `init()` function.
 
-In an open-source, multi-contributor campus ecosystem, this presents severe security vulnerabilities:
+In an open-source campus ecosystem, this presents severe operational and security risks:
 
-1. **Unrestricted Raw Database Access:** Any third-party plugin can execute `registry.getService('db:mongo')`, `registry.getService('db:sql')`, or `registry.getService('core:models')`, granting direct read/write access to sensitive student records, password hashes, and core collections.
-2. **Mutating Service Abuse:** A rogue or poorly written community plugin can invoke destructive methods on first-party services (e.g., `clubService.deleteClub()`, `authService.generateToken()`).
-3. **No Capability Manifest:** Plugins do not declare what data or capabilities they require in their `plugin.json` manifest.
-4. **Event Hijacking:** Without event namespace isolation, community plugins can intercept sensitive system events (such as user authentication or password resets) or emit fraudulent administrative events across the shared `eventBus`.
+1. **Unrestricted Raw Database Access:** Any third-party plugin could execute `registry.getService('db:mongo')`, `registry.getService('db:sql')`, or `registry.getService('core:models')`, gaining direct read/write access to sensitive student records, password hashes, and core collections without validation.
+2. **Untracked Mutating Service Abuse:** Rogue or buggy plugins could invoke destructive service methods (e.g., `clubService.deleteClub()`, `authService.generateToken()`) without administrative visibility.
+3. **No Capability Manifest:** Plugins did not declare what data or services they required in their `plugin.json` manifest.
+4. **Event Hijacking:** Without namespace isolation, community plugins could intercept sensitive system events (auth tokens, user passwords) or emit fraudulent administrative events across the shared `eventBus`.
+
+Conversely, **locking community plugins into purely read-only resolvers would severely handicap the platform**:
+
+- Developers would be unable to build advanced integrations (e.g., Biometric Attendance hardware sync, Institute ERP bridges, Custom Payment Gateways).
+- The core team would become a bottleneck, forced to write custom resolvers for every developer request.
 
 ## Decision
 
-We will implement a **Two-Tier Plugin Architecture with Capability-Based Sandboxing**:
+We adopt a **Capability-Based Permission Model with Administrative Consent** (inspired by Android, Shopify, and VS Code extension systems):
 
-1. **Manifest Tier Declaration (`plugin.json`):**
-   - Plugins must declare their tier (`"tier": "core" | "community"`).
-   - Core first-party plugins maintained within the official repository default to `"tier": "core"`.
-   - Third-party or marketplace plugins default to `"tier": "community"`.
-   - Community plugins must declare requested capabilities and consumed resolvers in their manifest:
-     ```json
-     {
-       "name": "attendance-tracker",
-       "version": "1.0.0",
-       "tier": "community",
-       "permissions": ["club:view", "event:view"],
-       "consumes": {
-         "resolvers": ["club:summary", "event:basicInfo"],
-         "events": ["event:created", "event:updated"]
-       }
-     }
-     ```
+### 1. Philosophy: "Business Services Allowed, Raw Database Forbidden"
 
-2. **Provenance Verification & Anti-Spoofing (Preventing Privilege Escalation):**
-   - **"Manifest proposes, Host enforces":** Trust cannot rely solely on a user-editable JSON string. A 3rd-party developer cannot simply write `"tier": "core"` in `plugin.json` to obtain root access.
-   - **Immutable Core Whitelist:** CampusOS Core maintains an immutable set of verified first-party plugins (`auth`, `club`, `event`, `budget`, `calendar`, `task`, `vendor`, `resource`, `scheduling`, `forms`, `institute`, `plugin-manager`, `activity`, `recruitment`).
-   - **Enforcement Rule:** If an unverified plugin declares `"tier": "core"`, the bootloader detects the spoofing attempt, logs a critical security alert, and either:
-     - Refuses to load the plugin (`InvalidTierClaimError`), or
-     - Forcibly demotes the runtime context to `"tier": "community"`.
-   - **Physical Directory Segregation:** Community plugins installed at runtime are placed into a segregated directory (e.g., `plugins/community/`), ensuring physical filesystem boundaries dictate default trust tiers.
+- **Raw Database Connections (`db:mongo`, `db:sql`, `core:models`):** Strictly forbidden for community tier plugins. No third-party code may run direct queries against database drivers.
+- **Service Layer Access:** Allowed for community plugins, provided the required service capabilities are **declared in the manifest** and **explicitly approved by the Institute Administrator**.
+- **Rationale:** First-party services (e.g., `eventService.registerAttendance()`) encapsulate schema validation, atomic state transitions, RBAC enforcement, and domain event publishing. Routing operations through services protects data integrity while giving developers rich mutation capabilities.
 
-3. **Scoped Registry Proxy (`backend/src/core/sandbox-registry.js`):**
-   - When loading a `community` plugin, `plugin-loader.js` injects a restricted security proxy (`createScopedRegistry(manifest, globalRegistry)`) instead of the raw singleton.
-   - **Forbidden Services:** Attempts to call `registry.getService()` for protected keys (`db:mongo`, `db:sql`, `db:manager`, `core:models`, `auth:jwt`) throw an immediate `AccessDeniedError`.
-   - **Resolver Promotion:** Community plugins are steered to access cross-plugin data purely through read-only, sanitized resolvers via `registry.getResolver(name)`.
-   - **Permission Verification:** Calling `getResolver()` requires that the resolver is declared under the plugin's `consumes.resolvers` manifest.
+### 2. Manifest Capability Declaration (`plugin.json`)
 
-4. **Scoped Event Bus (`backend/src/core/sandbox-event-bus.js`):**
-   - The injected `eventBus` for community plugins enforces namespace prefixes (e.g., `plugin:attendance:*`) for publications and only allows subscriptions to explicitly declared event channels.
+Plugins must declare their tier, requested service capabilities, and consumed event channels:
 
-## Alternatives Considered
+```json
+{
+  "name": "biometric-attendance",
+  "version": "1.0.0",
+  "tier": "community",
+  "capabilities": [
+    "service:event:read",
+    "service:event:write",
+    "service:club:read"
+  ],
+  "consumes": {
+    "resolvers": ["club:summary", "event:basicInfo"],
+    "events": ["event:created", "event:updated"]
+  }
+}
+```
 
-1. **Worker Threads / VM2 Process Isolation:**
-   - _Consideration:_ Running each plugin in a separate Node.js `worker_threads` or V8 isolate.
-   - _Rejection Rationale:_ Extreme memory overhead, complex IPC serialization for Express request/response objects, and high latency for internal operations.
-2. **Status Quo (Flat-Trust Monolith):**
-   - _Consideration:_ Relying solely on manual code review of community plugins.
-   - _Rejection Rationale:_ Unacceptable security risk for university deployments handling confidential student records.
+### 3. Provenance Verification & Anti-Spoofing (Preventing Privilege Escalation)
+
+**Rule: "Manifest proposes, Host enforces."**
+
+- Trust cannot rely solely on a user-editable JSON file. A third-party developer cannot gain core privileges simply by writing `"tier": "core"` in `plugin.json`.
+- **Immutable Core Whitelist:** CampusOS Core maintains an immutable set of verified first-party plugins (`auth`, `club`, `event`, `budget`, `calendar`, `task`, `vendor`, `resource`, `scheduling`, `forms`, `institute`, `plugin-manager`, `activity`, `recruitment`).
+- **Enforcement Rule:** If an unverified plugin declares `"tier": "core"`, the bootloader detects the spoofing attempt, logs a critical security alert, and either:
+  - Refuses to load the plugin (`InvalidTierClaimError`), or
+  - Forcibly demotes the runtime context to `"tier": "community"`.
+- **Physical Directory Segregation:** Community plugins installed at runtime are placed into a segregated directory (e.g., `plugins/community/`), ensuring physical filesystem boundaries dictate default trust tiers.
+
+### 4. Administrative Consent at Installation
+
+- When an administrator installs a community plugin via the Admin UI or CLI, the host renders an explicit permission consent prompt:
+  > ⚠️ **"Biometric Attendance" is requesting permissions:**
+  >
+  > - Read Club Members (`service:club:read`)
+  > - Modify Event Attendance Records (`service:event:write`)
+  >
+  > **[Approve & Install]** &nbsp;&nbsp;&nbsp;&nbsp; **[Cancel]**
+- Granted permissions are stored in the database (`Plugin.grantedCapabilities`).
+- At boot time, the plugin loader only injects services that match the administrator's approved list.
+
+### 5. Capability-Based Registry Proxy (`backend/src/core/sandbox-registry.js`)
+
+When loading a community plugin, `plugin-loader.js` wraps the registry in a dynamic security proxy:
+
+- **Forbidden Services:** Calls to `registry.getService('db:*')` or `registry.getService('core:models')` throw an immediate `AccessDeniedError`.
+- **Capability Check on Services:** Calls to `registry.getService('service:event')` verify that `service:event:read` (or `write`) is present in `grantedCapabilities`. If not, an `AccessDeniedError` is thrown.
+- **Read-Only Resolvers:** Clean data views are made available via `registry.getResolver(name)`.
+
+### 6. Scoped Event Bus (`backend/src/core/sandbox-event-bus.js`)
+
+The injected `eventBus` for community plugins:
+
+- Enforces namespace prefixes (e.g., `plugin:attendance:*`) for event publication.
+- Restricts event subscriptions strictly to channels declared in `consumes.events`.
+
+### 7. Trusted / Developer Mode for Institute IT Teams
+
+- Institute IT administrators developing custom in-house enterprise plugins can toggle a "Trusted Internal Plugin" flag in the Admin Dashboard, granting full core access with immutable audit logging.
 
 ## Consequences
 
 ### Positive
 
-- Strict security boundaries: community plugins cannot leak or corrupt database state or bypass permission checks.
-- Zero-friction first-party development: official core plugins retain full unrestricted access.
-- Clear contract between plugin authors and platform administrators regarding data consumption.
+- **High Developer Extensibility:** Developers can build powerful, mutating integrations (ERP sync, biometric attendance, custom certificates) using official service APIs.
+- **Strict Database Integrity:** Core collections (`User`, `Club`, `Event`) cannot be corrupted via raw driver operations; all mutations go through validated service pipelines.
+- **Administrative Transparency:** Campus administrators have complete visibility and consent control over what each plugin can read or modify.
+- **Zero Regressions for Core Plugins:** Shipped first-party plugins retain full, unrestricted access.
 
 ### Negative
 
-- Community plugin developers cannot use direct database access and must request resolver additions if a required data view does not yet exist.
+- Requires implementing the capability proxy wrapper (`sandbox-registry.js`) and admin consent UI flow.
+- Services exposed to community plugins must ensure robust parameter validation.
 
 ## Related ADRs
 
