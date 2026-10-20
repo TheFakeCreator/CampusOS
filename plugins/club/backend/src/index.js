@@ -73,9 +73,8 @@ export async function init(app, registry, eventBus) {
     requireSuperAdmin
   );
 
-  // Mount the slug resolver middleware globally for all downstream plugins under /api/v1
-  const slugResolver = createSlugResolver(Club);
-  app.use('/api/v1', slugResolver);
+  // Register scoped parameter pre-condition for :clubId routes
+  app.param('clubId', createSlugResolver(Club));
 
   if (eventBus) {
     registerEventHandlers(eventBus, {
