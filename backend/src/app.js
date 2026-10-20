@@ -8,6 +8,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { loggerMiddleware } from './middleware/logger.js';
+import { requestContextMiddleware } from './middleware/request-context.middleware.js';
+import { RequestContext } from './core/request-context.js';
 import { authMiddleware } from './middleware/auth.js';
 import {
   requirePermissions,
@@ -27,6 +29,7 @@ export async function createApp(registry) {
   // Register Core Database Services & Models
   databaseManager.registerServices(registry);
   registry.registerService('core:models', { User, Plugin });
+  registry.registerService('core:request_context', RequestContext);
 
   // Environment config
   const isDev = process.env.NODE_ENV !== 'production';
@@ -41,7 +44,10 @@ export async function createApp(registry) {
 
   // ============== MIDDLEWARE CHAIN (Order matters!) ==============
 
-  // 0. Security Headers
+  // 0. Request Context (Request-scoped cache & AsyncLocalStorage)
+  app.use(requestContextMiddleware);
+
+  // 1. Security Headers
   app.use(helmet());
 
   // 1. Body parsing

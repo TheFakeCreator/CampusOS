@@ -51,6 +51,9 @@ export async function init(app, registry, eventBus) {
       if (!taskId) return null;
       try {
         const taskDoc = await taskRepository.findById(taskId);
+        if (req.contextCache && taskDoc) {
+          req.contextCache.set(`entity:task:${taskId}`, taskDoc);
+        }
         return taskDoc?.clubId
           ? { type: 'club:member_service', id: taskDoc.clubId.toString() }
           : null;

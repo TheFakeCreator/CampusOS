@@ -26,6 +26,12 @@ export function requirePermissions(...allowedPermissions) {
       } else {
         // Use registry context resolvers to dynamically lookup the context
         context = await registry.resolveContext(req);
+        if (context) {
+          req.resolvedContext = context;
+          if (req.contextCache) {
+            req.contextCache.set('resolvedContext', context);
+          }
+        }
       }
 
       // 4. If we have a context, check context-specific permissions

@@ -13,7 +13,8 @@
     "./api-errors": "./src/api-errors.ts",
     "./auth-provider": "./src/auth-provider.tsx",
     "./plugin-registry": "./src/plugin-registry.ts",
-    "./extension-point": "./src/extension-point.tsx"
+    "./extension-point": "./src/extension-point.tsx",
+    "./request-context": "./src/request-context.js"
   },
   "scripts": {
     "test": "echo \"No tests yet\" && exit 0",

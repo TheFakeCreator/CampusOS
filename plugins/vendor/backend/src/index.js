@@ -65,6 +65,9 @@ export async function init(app, registry, eventBus) {
     if (!vendorId || vendorId === 'assignments') return null;
     try {
       const vendorDoc = await vendorRepository.findById(vendorId);
+      if (req.contextCache && vendorDoc) {
+        req.contextCache.set(`entity:vendor:${vendorId}`, vendorDoc);
+      }
       return vendorDoc?.clubId
         ? { type: 'club:member_service', id: vendorDoc.clubId.toString() }
         : null;

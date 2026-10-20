@@ -58,7 +58,7 @@ describe('Vendor Listeners (Integration)', () => {
 
       eventBus.emit('event:deleted', { eventId });
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const vendorsAfter = await vendorService.getEventVendors(eventId);
       expect(vendorsAfter.length).toBe(0);

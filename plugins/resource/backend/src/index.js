@@ -68,6 +68,9 @@ export async function init(app, registry, eventBus) {
       return null;
     try {
       const resDoc = await resourceRepository.findById(resourceId);
+      if (req.contextCache && resDoc) {
+        req.contextCache.set(`entity:resource:${resourceId}`, resDoc);
+      }
       return resDoc?.clubId
         ? { type: 'club:member_service', id: resDoc.clubId.toString() }
         : null;

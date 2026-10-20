@@ -72,6 +72,9 @@ export async function init(app, registry, eventBus) {
       if (!eventId || eventId === 'public') return null;
       try {
         const eventDoc = await eventRepository.getEventById(eventId);
+        if (req.contextCache && eventDoc) {
+          req.contextCache.set(`entity:event:${eventId}`, eventDoc);
+        }
         return eventDoc?.clubId
           ? { type: 'club:member_service', id: eventDoc.clubId.toString() }
           : null;
