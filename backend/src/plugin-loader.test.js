@@ -173,4 +173,33 @@ describe('Plugin Loader Fail-Fast Contract & Bootloader (Issue #113)', () => {
       expect.objectContaining({ name: 'valid-plugin', version: '1.0.0' })
     );
   });
+
+  it('injects a scoped child logger to plugin init() as the 4th argument', async () => {
+    const pluginDir = path.join(tempPluginsDir, 'logged-plugin');
+    const backendSrc = path.join(pluginDir, 'backend', 'src');
+    fs.mkdirSync(backendSrc, { recursive: true });
+
+    const manifest = {
+      name: 'logged-plugin',
+      version: '1.0.0',
+      description: 'A plugin that uses scoped logger'
+    };
+
+    fs.writeFileSync(
+      path.join(pluginDir, 'plugin.json'),
+      JSON.stringify(manifest)
+    );
+
+    fs.writeFileSync(
+      path.join(backendSrc, 'index.js'),
+      'export function init(app, registry, eventBus, logger) { app.receivedPlugin = logger?.context?.plugin; }'
+    );
+
+    await loadPlugins(mockApp, mockRegistry, {
+      pluginsDir: tempPluginsDir,
+      failFast: true
+    });
+
+    expect(mockApp.receivedPlugin).toBe('logged-plugin');
+  });
 });

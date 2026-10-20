@@ -14,6 +14,7 @@ import {
 } from '@campus-os/shared/plugin-contract';
 import { Plugin } from './database/schemas/index.js';
 import { eventBus } from './core/event-bus.js';
+import { rootLogger } from './core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +22,7 @@ const __dirname = path.dirname(__filename);
 export async function loadPlugins(app, registry, options = {}) {
   const isProd =
     process.env.NODE_ENV === 'production' || options.failFast === true;
+  const logger = options.logger || rootLogger;
   const appsDir =
     options.pluginsDir || path.join(__dirname, '../..', 'plugins');
 
@@ -270,7 +272,8 @@ export async function loadPlugins(app, registry, options = {}) {
         );
       }
 
-      await init(app, registry, eventBus);
+      const pluginLogger = logger.child({ plugin: plugin.name });
+      await init(app, registry, eventBus, pluginLogger);
       registry.registerPluginMetadata(plugin.name, plugin.manifest);
       console.log(`✓ Loaded plugin: ${plugin.name} (v${plugin.version})`);
     } catch (error) {

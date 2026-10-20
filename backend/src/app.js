@@ -20,6 +20,7 @@ import { registerJwtAuthenticator } from './auth/jwt-authenticator.js';
 import { loadPlugins } from './plugin-loader.js';
 import { User, Plugin } from './database/schemas/index.js';
 import { databaseManager, healthCheck } from './database/connection.js';
+import { rootLogger } from './core/logger.js';
 
 export async function createApp(registry) {
   const app = express();
@@ -30,6 +31,7 @@ export async function createApp(registry) {
   databaseManager.registerServices(registry);
   registry.registerService('core:models', { User, Plugin });
   registry.registerService('core:request_context', RequestContext);
+  registry.registerService('core:logger', rootLogger);
 
   // Environment config
   const isDev = process.env.NODE_ENV !== 'production';
