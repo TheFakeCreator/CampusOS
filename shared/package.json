@@ -15,7 +15,7 @@
     "./plugin-registry": "./src/plugin-registry.ts",
     "./extension-point": "./src/extension-point.tsx",
     "./request-context": "./src/request-context.js",
-    "./plugin-contract": "./src/plugin-contract.ts"
+    "./plugin-contract": "./src/plugin-contract.js"
   },
   "dependencies": {
     "semver": "^7.8.5",

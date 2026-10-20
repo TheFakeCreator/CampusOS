@@ -23,6 +23,7 @@
     "plugin:create": "node scripts/plugin.js create",
     "plugin:install": "node scripts/plugin.js install",
     "plugin:uninstall": "node scripts/plugin.js uninstall",
+    "plugin:validate": "node scripts/plugin.js validate",
     "plugin:sync": "node scripts/plugin.js generate-registry",
     "test:watch": "vitest",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",

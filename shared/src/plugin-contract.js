@@ -75,30 +75,14 @@ export const PluginManifestSchema = z
   })
   .passthrough();
 
-export type PluginManifest = z.infer<typeof PluginManifestSchema>;
-
-export type PluginInitFunction = (
-  app: any,
-  registry: any,
-  eventBus?: any
-) => Promise<void> | void;
-
-export interface CampusOSPlugin {
-  manifest: PluginManifest;
-  init: PluginInitFunction;
-}
-
 /**
  * Validates a plugin manifest and asserts that the folder name matches the manifest name.
  * @param {unknown} rawManifest - The parsed JSON content of plugin.json
  * @param {string} [folderName] - The directory name in /plugins/
- * @returns {PluginManifest} Validated plugin manifest
+ * @returns {object} Validated plugin manifest
  * @throws {PluginContractError} If manifest validation fails or name does not match folder
  */
-export function validatePluginManifest(
-  rawManifest: unknown,
-  folderName?: string
-): PluginManifest {
+export function validatePluginManifest(rawManifest, folderName) {
   const result = PluginManifestSchema.safeParse(rawManifest);
 
   if (!result.success) {
