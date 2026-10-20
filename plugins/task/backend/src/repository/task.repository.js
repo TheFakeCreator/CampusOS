@@ -40,6 +40,17 @@ export function createTaskRepository() {
 
     async saveDocument(doc) {
       return await doc.save();
+    },
+
+    async deleteByClubId(clubId) {
+      return await Task.deleteMany({ clubId }).exec();
+    },
+
+    async unassignByUserId(userId) {
+      return await Task.updateMany(
+        { $or: [{ assigneeId: userId }, { createdBy: userId }] },
+        { $set: { assigneeName: null, assigneeId: null } }
+      ).exec();
     }
   };
 }

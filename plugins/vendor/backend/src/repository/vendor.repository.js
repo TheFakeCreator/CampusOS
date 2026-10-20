@@ -43,6 +43,10 @@ export class VendorRepository {
   async saveDocument(doc) {
     return await doc.save();
   }
+
+  async deleteByClubId(clubId) {
+    return await Vendor.deleteMany({ clubId });
+  }
 }
 
 export default VendorRepository;

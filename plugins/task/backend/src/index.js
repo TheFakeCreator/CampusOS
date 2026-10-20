@@ -60,8 +60,10 @@ export async function init(app, registry, eventBus) {
     });
   }
 
+  registry.registerService('task:service', taskService);
+
   if (eventBus) {
-    registerTaskHandlers(eventBus, registry);
+    registerTaskHandlers(eventBus, registry, taskService);
   }
 }
 

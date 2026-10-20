@@ -39,6 +39,10 @@ export function createResourceRepository() {
 
     async saveDocument(doc) {
       return await doc.save();
+    },
+
+    async deleteByOwner(owner) {
+      return await Resource.deleteMany({ owner }).exec();
     }
   };
 }

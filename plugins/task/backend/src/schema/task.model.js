@@ -21,6 +21,11 @@ const taskSchema = new mongoose.Schema(
       default: null,
       trim: true
     },
+    assigneeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
     dueDate: {
       type: Date,
       default: null
@@ -60,6 +65,7 @@ taskSchema.index({ clubId: 1, status: 1 });
 taskSchema.index({ clubId: 1, dueDate: 1 });
 taskSchema.index({ clubId: 1, createdBy: 1 });
 taskSchema.index({ createdBy: 1 });
+taskSchema.index({ assigneeId: 1 });
 
 taskSchema.set('toJSON', { virtuals: true });
 taskSchema.set('toObject', { virtuals: true });
