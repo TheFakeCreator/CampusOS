@@ -45,6 +45,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Architecture Boundary Check
+        run: pnpm lint:arch
+
   type-check:
     name: Type Check
     runs-on: ubuntu-latest
