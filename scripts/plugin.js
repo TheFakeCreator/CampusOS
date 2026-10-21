@@ -8,6 +8,7 @@ import {
   validatePluginManifest,
   PluginContractError
 } from '../shared/src/plugin-contract.js';
+import { buildPluginFrontend } from './build-plugin-frontend.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1086,6 +1087,27 @@ if (isMain) {
       validatePlugin(targetArg, { strict: isStrict });
       break;
     }
+    case 'build-frontend': {
+      const pluginName = args[1];
+      const isMinify = args.includes('--minify');
+      if (!pluginName) {
+        console.error(
+          '❌ Error: Please specify the plugin name to build frontend for.'
+        );
+        process.exit(1);
+      }
+      buildPluginFrontend(pluginName, { minify: isMinify })
+        .then(({ outfile, sizeBytes }) => {
+          console.log(
+            `✅ Frontend bundle built: ${outfile} (${(sizeBytes / 1024).toFixed(2)} KB)`
+          );
+        })
+        .catch((err) => {
+          console.error(`❌ Build failed:`, err.message);
+          process.exit(1);
+        });
+      break;
+    }
     default:
       console.log(`
 CampusOS Plugin CLI
@@ -1095,6 +1117,7 @@ Usage:
   node scripts/plugin.js install <path-to-folder-zip-or-github-repo>
   node scripts/plugin.js uninstall <plugin-name>
   node scripts/plugin.js validate [plugin-name-or-path] [--strict]
+  node scripts/plugin.js build-frontend <plugin-name> [--minify]
   node scripts/plugin.js generate-registry
 `);
       process.exit(1);

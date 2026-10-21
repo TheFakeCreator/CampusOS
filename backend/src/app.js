@@ -18,6 +18,7 @@ import {
 import { errorMiddleware, notFoundMiddleware } from './middleware/error.js';
 import { registerJwtAuthenticator } from './auth/jwt-authenticator.js';
 import { loadPlugins } from './plugin-loader.js';
+import { registerPluginBundleRoutes } from './routes/plugin-bundle.routes.js';
 import { User, Plugin } from './database/schemas/index.js';
 import { databaseManager, healthCheck } from './database/connection.js';
 import { rootLogger } from './core/logger.js';
@@ -128,6 +129,9 @@ export async function createApp(registry) {
     const permissions = registry.permissions.getAllGrouped();
     res.json({ success: true, permissions });
   });
+
+  // Public endpoints for plugin frontend ESM bundles and manifests (ADR-014)
+  registerPluginBundleRoutes(app, { registry });
 
   // 6. Authentication - Verify JWT before protected routes
   registerJwtAuthenticator(registry);
