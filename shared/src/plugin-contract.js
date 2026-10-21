@@ -14,6 +14,36 @@ export class PluginContractError extends Error {
 }
 
 /**
+ * Custom error thrown when a plugin violates capability or security sandbox boundaries.
+ */
+export class PluginSecurityError extends PluginContractError {
+  constructor(message, pluginName, details) {
+    super(message, pluginName, details);
+    this.name = 'PluginSecurityError';
+  }
+}
+
+/**
+ * Thrown when an untrusted or community plugin attempts to access an unapproved service or database.
+ */
+export class AccessDeniedError extends PluginSecurityError {
+  constructor(message, pluginName, details) {
+    super(message, pluginName, details);
+    this.name = 'AccessDeniedError';
+  }
+}
+
+/**
+ * Thrown when an unverified plugin attempts privilege escalation by claiming tier 'core'.
+ */
+export class InvalidTierClaimError extends PluginSecurityError {
+  constructor(message, pluginName, details) {
+    super(message, pluginName, details);
+    this.name = 'InvalidTierClaimError';
+  }
+}
+
+/**
  * Zod schema for plugin dependencies.
  * Accepts either:
  * 1. A Record<string, string> where values are valid SemVer ranges (e.g. { "club": "^1.0.0" })
@@ -62,6 +92,15 @@ export const PluginManifestSchema = z
         message: 'Plugin version must be a valid SemVer string (e.g. "1.0.0")'
       }),
     description: z.string().min(1, 'Plugin description cannot be empty'),
+    tier: z.enum(['core', 'community']).optional().default('community'),
+    capabilities: z.array(z.string()).optional().default([]),
+    consumes: z
+      .object({
+        resolvers: z.array(z.string()).optional().default([]),
+        events: z.array(z.string()).optional().default([])
+      })
+      .optional()
+      .default({}),
     dependencies: PluginDependenciesSchema,
     defaultEnabled: z.boolean().optional().default(true),
     database: z
@@ -116,6 +155,9 @@ export function validatePluginManifest(rawManifest, folderName) {
 
 export default {
   PluginContractError,
+  PluginSecurityError,
+  AccessDeniedError,
+  InvalidTierClaimError,
   PluginManifestSchema,
   PluginDependenciesSchema,
   validatePluginManifest

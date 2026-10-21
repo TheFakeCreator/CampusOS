@@ -12,12 +12,17 @@ export class PluginContractError extends Error {
   constructor(message: string, pluginName?: string, details?: unknown);
 }
 
+export class PluginSecurityError extends PluginContractError {}
+export class AccessDeniedError extends PluginSecurityError {}
+export class InvalidTierClaimError extends PluginSecurityError {}
+
 export type PluginManifest = z.infer<typeof PluginManifestSchema>;
 
 export type PluginInitFunction = (
   app: any,
   registry: any,
-  eventBus?: any
+  eventBus?: any,
+  logger?: any
 ) => Promise<void> | void;
 
 export interface CampusOSPlugin {

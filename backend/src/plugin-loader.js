@@ -15,6 +15,12 @@ import {
 import { Plugin } from './database/schemas/index.js';
 import { eventBus } from './core/event-bus.js';
 import { rootLogger } from './core/logger.js';
+import {
+  OFFICIAL_CORE_PLUGINS,
+  verifyPluginProvenance
+} from './core/plugin-provenance.js';
+import { createScopedRegistry } from './core/sandbox-registry.js';
+import { createScopedEventBus } from './core/sandbox-event-bus.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +39,7 @@ export async function loadPlugins(app, registry, options = {}) {
 
   // 1. Fetch DB configs (only if DB connection is active)
   const pluginConfig = {};
+  const pluginDbRecords = new Map();
   const isDbConnected = Plugin.db?.readyState === 1 && !options.skipDb;
 
   if (isDbConnected) {
@@ -40,6 +47,7 @@ export async function loadPlugins(app, registry, options = {}) {
       const dbPlugins = await Plugin.find({});
       for (const p of dbPlugins) {
         pluginConfig[p.name] = p.enabled;
+        pluginDbRecords.set(p.name, p);
       }
     } catch (err) {
       if (isProd) throw err;
@@ -95,20 +103,51 @@ export async function loadPlugins(app, registry, options = {}) {
     }
 
     // Check if new plugin not in DB
+    const isOfficial = OFFICIAL_CORE_PLUGINS.has(manifest.name);
+    let dbRecord = pluginDbRecords.get(manifest.name);
+
     if (typeof pluginConfig[manifest.name] === 'undefined') {
       const isEnabled = manifest.defaultEnabled !== false;
+      const initialTier = isOfficial ? 'core' : manifest.tier || 'community';
+      const initialGranted = isOfficial ? ['*'] : [];
 
       if (isDbConnected) {
         console.log(
           `[Config] New plugin '${manifest.name}' discovered. Inserting to DB as ${isEnabled ? 'enabled' : 'disabled'}.`
         );
         try {
-          await Plugin.create({ name: manifest.name, enabled: isEnabled });
+          dbRecord = await Plugin.create({
+            name: manifest.name,
+            enabled: isEnabled,
+            tier: initialTier,
+            trusted: isOfficial,
+            requestedCapabilities: manifest.capabilities || [],
+            grantedCapabilities: initialGranted
+          });
+          pluginDbRecords.set(manifest.name, dbRecord);
         } catch {
           // In unit tests or mock DB environments, continue with in-memory state
         }
       }
       pluginConfig[manifest.name] = isEnabled;
+    } else if (dbRecord && isDbConnected && manifest.capabilities) {
+      // Sync requestedCapabilities if manifest updated
+      const currentRequested = dbRecord.requestedCapabilities || [];
+      const manifestCaps = manifest.capabilities || [];
+      if (
+        JSON.stringify(currentRequested.slice().sort()) !==
+        JSON.stringify(manifestCaps.slice().sort())
+      ) {
+        try {
+          await Plugin.updateOne(
+            { name: manifest.name },
+            { $set: { requestedCapabilities: manifestCaps } }
+          );
+          dbRecord.requestedCapabilities = manifestCaps;
+        } catch {
+          // best-effort sync
+        }
+      }
     }
 
     if (pluginConfig[manifest.name] !== true) {
@@ -116,12 +155,21 @@ export async function loadPlugins(app, registry, options = {}) {
       continue;
     }
 
+    const isTrusted = dbRecord ? Boolean(dbRecord.trusted) : isOfficial;
+    const grantedCapabilities =
+      dbRecord?.grantedCapabilities ||
+      (isOfficial
+        ? ['*']
+        : options.grantedCapabilitiesMap?.[manifest.name] || []);
+
     discoveredPlugins.set(manifest.name, {
       name: manifest.name,
       version: manifest.version,
       dependencies: manifest.dependencies || {},
       modulePath,
-      manifest
+      manifest,
+      trusted: isTrusted,
+      grantedCapabilities
     });
   }
 
@@ -230,11 +278,27 @@ export async function loadPlugins(app, registry, options = {}) {
 
   // 5. Load and init sequentially
   for (const plugin of sortedPlugins) {
+    // 1. Verify plugin provenance and determine effective tier
+    const { verifiedTier, demoted } = verifyPluginProvenance(plugin.manifest, {
+      trusted: plugin.trusted,
+      isProd,
+      failFast: options.failFast
+    });
+
+    if (demoted) {
+      console.warn(
+        `⚠️ Plugin '${plugin.name}' claimed 'core' tier but is not official or trusted. Demoted to 'community'.`
+      );
+    }
+
     // If frontend-only plugin (backend: false), register metadata and skip backend entry
     if (plugin.manifest.backend === false) {
-      registry.registerPluginMetadata(plugin.name, plugin.manifest);
+      registry.registerPluginMetadata(plugin.name, {
+        ...plugin.manifest,
+        effectiveTier: verifiedTier
+      });
       console.log(
-        `ℹ️ Registered frontend-only plugin: ${plugin.name} (v${plugin.version})`
+        `ℹ️ Registered frontend-only plugin: ${plugin.name} (v${plugin.version}) [${verifiedTier}]`
       );
       continue;
     }
@@ -261,6 +325,22 @@ export async function loadPlugins(app, registry, options = {}) {
     }
 
     try {
+      // 2. Select sandboxed or unrestricted registry and eventBus based on verifiedTier
+      let effectiveRegistry = registry;
+      let effectiveEventBus = eventBus;
+
+      if (verifiedTier === 'community') {
+        effectiveRegistry = createScopedRegistry(plugin.manifest, registry, {
+          grantedCapabilities: plugin.grantedCapabilities
+        });
+        effectiveEventBus = createScopedEventBus(plugin.manifest, eventBus, {
+          grantedCapabilities: plugin.grantedCapabilities
+        });
+        console.log(
+          `🔒 Sandboxed registry and eventBus initialized for: ${plugin.name}`
+        );
+      }
+
       const loadedModule = await import(pathToFileURL(moduleEntryPath).href);
       const init = loadedModule.init || loadedModule.default;
 
@@ -273,9 +353,14 @@ export async function loadPlugins(app, registry, options = {}) {
       }
 
       const pluginLogger = logger.child({ plugin: plugin.name });
-      await init(app, registry, eventBus, pluginLogger);
-      registry.registerPluginMetadata(plugin.name, plugin.manifest);
-      console.log(`✓ Loaded plugin: ${plugin.name} (v${plugin.version})`);
+      await init(app, effectiveRegistry, effectiveEventBus, pluginLogger);
+      registry.registerPluginMetadata(plugin.name, {
+        ...plugin.manifest,
+        effectiveTier: verifiedTier
+      });
+      console.log(
+        `✓ Loaded plugin: ${plugin.name} (v${plugin.version}) [${verifiedTier}]`
+      );
     } catch (error) {
       console.error(
         `✗ Failed to initialize plugin ${plugin.name}:`,

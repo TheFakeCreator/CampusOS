@@ -3,7 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { loadPlugins } from './plugin-loader.js';
-import { PluginContractError } from '@campus-os/shared/plugin-contract';
+import {
+  PluginContractError,
+  InvalidTierClaimError,
+  AccessDeniedError
+} from '@campus-os/shared/plugin-contract';
 
 describe('Plugin Loader Fail-Fast Contract & Bootloader (Issue #113)', () => {
   let tempPluginsDir;
@@ -201,5 +205,102 @@ describe('Plugin Loader Fail-Fast Contract & Bootloader (Issue #113)', () => {
     });
 
     expect(mockApp.receivedPlugin).toBe('logged-plugin');
+  });
+
+  it('rejects unverified 3rd-party plugin claiming core tier in failFast mode', async () => {
+    const pluginDir = path.join(tempPluginsDir, 'spoofed-plugin');
+    const backendSrc = path.join(pluginDir, 'backend', 'src');
+    fs.mkdirSync(backendSrc, { recursive: true });
+
+    const manifest = {
+      name: 'spoofed-plugin',
+      version: '1.0.0',
+      description: 'Attempting to spoof core tier',
+      tier: 'core'
+    };
+
+    fs.writeFileSync(
+      path.join(pluginDir, 'plugin.json'),
+      JSON.stringify(manifest)
+    );
+
+    fs.writeFileSync(
+      path.join(backendSrc, 'index.js'),
+      'export function init() {}'
+    );
+
+    await expect(
+      loadPlugins(mockApp, mockRegistry, {
+        pluginsDir: tempPluginsDir,
+        failFast: true
+      })
+    ).rejects.toThrow(InvalidTierClaimError);
+  });
+
+  it('sandboxes community plugins: denies raw db access inside community plugin init()', async () => {
+    const pluginDir = path.join(tempPluginsDir, 'community-test-plugin');
+    const backendSrc = path.join(pluginDir, 'backend', 'src');
+    fs.mkdirSync(backendSrc, { recursive: true });
+
+    const manifest = {
+      name: 'community-test-plugin',
+      version: '1.0.0',
+      description: 'Community plugin trying raw DB access',
+      tier: 'community'
+    };
+
+    fs.writeFileSync(
+      path.join(pluginDir, 'plugin.json'),
+      JSON.stringify(manifest)
+    );
+
+    fs.writeFileSync(
+      path.join(backendSrc, 'index.js'),
+      'export function init(app, registry) { registry.getService("db:mongo"); }'
+    );
+
+    await expect(
+      loadPlugins(mockApp, mockRegistry, {
+        pluginsDir: tempPluginsDir,
+        failFast: true
+      })
+    ).rejects.toThrow(AccessDeniedError);
+  });
+
+  it('records effectiveTier: "community" in plugin metadata for verified community plugins', async () => {
+    const pluginDir = path.join(tempPluginsDir, 'safe-community-plugin');
+    const backendSrc = path.join(pluginDir, 'backend', 'src');
+    fs.mkdirSync(backendSrc, { recursive: true });
+
+    const manifest = {
+      name: 'safe-community-plugin',
+      version: '1.0.0',
+      description: 'Safe community plugin',
+      tier: 'community'
+    };
+
+    fs.writeFileSync(
+      path.join(pluginDir, 'plugin.json'),
+      JSON.stringify(manifest)
+    );
+
+    fs.writeFileSync(
+      path.join(backendSrc, 'index.js'),
+      'export function init(app, registry) { app.ran = true; }'
+    );
+
+    await loadPlugins(mockApp, mockRegistry, {
+      pluginsDir: tempPluginsDir,
+      failFast: true
+    });
+
+    expect(mockApp.ran).toBe(true);
+    expect(mockRegistry.registerPluginMetadata).toHaveBeenCalledWith(
+      'safe-community-plugin',
+      expect.objectContaining({
+        name: 'safe-community-plugin',
+        effectiveTier: 'community'
+      })
+    );
   });
 });
